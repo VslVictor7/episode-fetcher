@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Logging;
-
 namespace AnimeMonitor;
 
 public sealed class Config
@@ -38,7 +36,7 @@ public sealed class Config
         HttpTimeoutSeconds = httpTimeoutSeconds;
     }
 
-    public static Config LoadFromEnv(ILogger logger)
+    public static Config LoadFromEnv(SimpleLogger logger)
     {
         var missing = new List<string>();
 
@@ -56,9 +54,8 @@ public sealed class Config
         {
             var raw = Environment.GetEnvironmentVariable(name);
             if (string.IsNullOrWhiteSpace(raw))
-            {
                 return defaultValue;
-            }
+
             return int.TryParse(raw, out var v) ? v : defaultValue;
         }
 
@@ -76,13 +73,12 @@ public sealed class Config
 
         if (missing.Count > 0)
         {
-            var msg = $"[ERROR] Variáveis de ambiente ausentes: {string.Join(", ", missing)}";
-            logger.LogError(msg);
+            var msg = $"Variáveis de ambiente ausentes: {string.Join(", ", missing)}";
+            logger.Error(msg);
             throw new InvalidOperationException(msg);
         }
 
-        logger.LogInformation("Configuração carregada com sucesso. CHECK_INTERVAL={CheckInterval}s, HTTP_TIMEOUT={HttpTimeout}s",
-            checkInterval, httpTimeout);
+        logger.Info($"Configuração carregada. CHECK_INTERVAL={checkInterval}s, HTTP_TIMEOUT={httpTimeout}s");
 
         return new Config(
             animePattern,
@@ -94,21 +90,5 @@ public sealed class Config
             savePath,
             checkInterval,
             httpTimeout);
-    }
-
-    public static LogLevel GetLogLevelFromEnv()
-    {
-        var levelRaw = (Environment.GetEnvironmentVariable("LOG_LEVEL") ?? "Information").Trim().ToUpperInvariant();
-
-        return levelRaw switch
-        {
-            "TRACE" => LogLevel.Trace,
-            "DEBUG" => LogLevel.Debug,
-            "INFORMATION" or "INFO" => LogLevel.Information,
-            "WARNING" or "WARN" => LogLevel.Warning,
-            "ERROR" => LogLevel.Error,
-            "CRITICAL" or "FATAL" => LogLevel.Critical,
-            _ => LogLevel.Information
-        };
     }
 }

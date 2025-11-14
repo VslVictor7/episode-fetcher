@@ -1,5 +1,4 @@
 ﻿using System.Net;
-using Microsoft.Extensions.Logging;
 using DotNetEnv;
 
 namespace AnimeMonitor;
@@ -8,71 +7,60 @@ public class Program
 {
     public static async Task Main(string[] args)
     {
-        // 1) Load .env into environment variables
-        // This is the equivalent of Python's load_dotenv()
+        // 1) Load .env
         Env.Load();
 
-        // 2) Configure logging based on LOG_LEVEL
-        var logLevel = Config.GetLogLevelFromEnv();
-
-        using var loggerFactory = LoggerFactory.Create(builder =>
-        {
-            builder
-                .SetMinimumLevel(logLevel)
-                .AddSimpleConsole(options =>
-                {
-                    options.SingleLine = true;
-                    options.TimestampFormat = "yyyy-MM-dd HH:mm:ss ";
-                });
-        });
-
-        var logger = loggerFactory.CreateLogger("anime-monitor");
+        // 2) Simple loggers — AOT friendly, no reflection
+        var mainLogger     = new SimpleLogger("Main");
+        var scraperLogger  = new SimpleLogger("AnimeScraper");
+        var qbLogger       = new SimpleLogger("QBittorrent");
+        var trackerLogger  = new SimpleLogger("EpisodeTracker");
 
         try
         {
-            // 3) Load config from environment
-            var config = Config.LoadFromEnv(logger);
+            // 3) Load config
+            var config = Config.LoadFromEnv(mainLogger);
 
-            // 4) Create HttpClient configured like Python's requests Session
+            // 4) HttpClient
             using var handler = new HttpClientHandler
             {
-                CookieContainer = new System.Net.CookieContainer(),
-                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+                CookieContainer = new CookieContainer(),
+                AutomaticDecompression = DecompressionMethods.GZip 
+                                       | DecompressionMethods.Deflate
             };
 
             using var httpClient = new HttpClient(handler)
             {
                 Timeout = TimeSpan.FromSeconds(config.HttpTimeoutSeconds)
             };
-            httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("anime-monitor/1.0 (+github.com/your-org) HttpClient");
+
+            httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
+                "anime-monitor/1.0 (+github.com/victorvsl7)"
+            );
 
             // 5) Instantiate services
-            var scraperLogger = loggerFactory.CreateLogger<AnimeScraper>();
-            var qbLogger = loggerFactory.CreateLogger<QBittorrentClient>();
-            var trackerLogger = loggerFactory.CreateLogger<EpisodeTracker>();
-
             var scraper = new AnimeScraper(httpClient, config, scraperLogger);
             var qbClient = new QBittorrentClient(httpClient, config, qbLogger);
             var tracker = new EpisodeTracker(config.EpisodeFile, trackerLogger);
 
-            // 6) Load next episode from JSON
+            // 6) Load episode
             int episode = tracker.LoadNextEpisode();
 
-            // 7) Monitoring loop
-            await MonitorAsync(scraper, qbClient, tracker, config, logger, episode);
+            // 7) Run monitor
+            await MonitorLoop(scraper, qbClient, tracker, config, mainLogger, episode);
         }
         catch (Exception ex)
         {
-            logger.LogCritical(ex, "[FATAL] Erro não tratado. Encerrando aplicação.");
+            mainLogger.Error("FATAL ERROR: " + ex.ToString());
         }
     }
 
-    private static async Task MonitorAsync(
+    private static async Task MonitorLoop(
         AnimeScraper scraper,
         QBittorrentClient qbClient,
         EpisodeTracker tracker,
         Config config,
-        ILogger logger,
+        SimpleLogger logger,
         int episode)
     {
         var cancellationToken = CancellationToken.None;
@@ -81,39 +69,37 @@ public class Program
         {
             try
             {
-                var pageUrl = await scraper.FindEpisodePageAsync(episode, cancellationToken);
+                string? pageUrl = await scraper.FindEpisodePageAsync(episode, cancellationToken);
 
                 if (pageUrl != null)
                 {
-                    var magnet = await scraper.ExtractMagnetAsync(pageUrl, cancellationToken);
+                    string? magnet = await scraper.ExtractMagnetAsync(pageUrl, cancellationToken);
 
                     if (!string.IsNullOrWhiteSpace(magnet))
                     {
-                        logger.LogInformation("[INFO] Enviando para o qBittorrent: {Magnet}", magnet);
+                        logger.Info($"Enviando para qBittorrent: {magnet}");
 
                         await qbClient.AuthenticateAsync(cancellationToken);
                         await qbClient.AddMagnetAsync(magnet, cancellationToken);
 
                         tracker.SaveNextEpisode(episode + 1);
 
-                        logger.LogInformation("[OK] Processo finalizado para episódio {Episode}.", episode);
+                        logger.Info($"OK — Episódio {episode} concluído.");
                         break;
                     }
                     else
                     {
-                        logger.LogWarning("[ERROR] Magnet não encontrado na página do episódio.");
+                        logger.Warn("Magnet não encontrado.");
                     }
                 }
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "[ERROR] Exceção no ciclo principal.");
+                logger.Error("Erro no loop principal: " + ex.ToString());
             }
 
-            var delaySeconds = config.CheckIntervalSeconds;
-            logger.LogInformation("[WAIT] Tentando novamente em {Minutes:F1} minutos...", delaySeconds / 60.0);
-
-            await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
+            logger.Info($"Aguardando {config.CheckIntervalSeconds / 60.0:F1} minutos...");
+            await Task.Delay(TimeSpan.FromSeconds(config.CheckIntervalSeconds));
         }
     }
 }

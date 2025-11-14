@@ -15,9 +15,11 @@ RUN dotnet publish -c Release \
     --self-contained true \
     -r linux-x64 \
     /p:PublishSingleFile=true \
+    /p:PublishTrimmed=true \
+    /p:StripSymbols=true \
     /p:IncludeNativeLibrariesForSelfExtract=true
-    
 
+    
 # ===============================
 #   STAGE 2 — RUNTIME (CHISELED)
 # ===============================

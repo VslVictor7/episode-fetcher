@@ -1,8 +1,5 @@
 using System.Net;
 using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
-using Microsoft.Extensions.Logging;
 
 namespace AnimeMonitor;
 
@@ -10,9 +7,9 @@ public sealed class QBittorrentClient
 {
     private readonly HttpClient _httpClient;
     private readonly Config _config;
-    private readonly ILogger<QBittorrentClient> _logger;
+    private readonly SimpleLogger _logger;
 
-    public QBittorrentClient(HttpClient httpClient, Config config, ILogger<QBittorrentClient> logger)
+    public QBittorrentClient(HttpClient httpClient, Config config, SimpleLogger logger)
     {
         _httpClient = httpClient;
         _config = config;
@@ -29,20 +26,19 @@ public sealed class QBittorrentClient
             new KeyValuePair<string?, string?>("password", _config.QbPassword),
         });
 
-        _logger.LogInformation("[INFO] Autenticando no qBittorrent…");
+        _logger.Info("Autenticando no qBittorrent…");
 
         using var resp = await _httpClient.PostAsync(url, content, cancellationToken);
-
         var body = await resp.Content.ReadAsStringAsync(cancellationToken);
 
         if (resp.StatusCode != HttpStatusCode.OK || !body.Contains("Ok.", StringComparison.OrdinalIgnoreCase))
         {
-            var msg = $"[ERROR] Falha ao autenticar no qBittorrent: {(int)resp.StatusCode} - {body}";
-            _logger.LogError(msg);
+            var msg = $"Falha ao autenticar no qBittorrent: {(int)resp.StatusCode} - {body}";
+            _logger.Error(msg);
             throw new InvalidOperationException(msg);
         }
 
-        _logger.LogInformation("[AUTH_OK] Login bem-sucedido no qBittorrent");
+        _logger.Info("Login bem-sucedido no qBittorrent");
     }
 
     public async Task AddMagnetAsync(string magnetLink, CancellationToken cancellationToken)
@@ -60,18 +56,18 @@ public sealed class QBittorrentClient
 
         var content = new FormUrlEncodedContent(payload);
 
-        _logger.LogInformation("[INFO] Enviando magnet ao qBittorrent (diretório: {SavePath})", _config.SavePath);
+        _logger.Info($"Enviando magnet ao qBittorrent (diretório: {_config.SavePath})");
 
         using var resp = await _httpClient.PostAsync(url, content, cancellationToken);
         var body = await resp.Content.ReadAsStringAsync(cancellationToken);
 
         if (resp.StatusCode != HttpStatusCode.OK)
         {
-            var msg = $"[ERROR] Erro ao enviar torrent: {(int)resp.StatusCode} - {body}";
-            _logger.LogError(msg);
+            var msg = $"Erro ao enviar torrent: {(int)resp.StatusCode} - {body}";
+            _logger.Error(msg);
             throw new InvalidOperationException(msg);
         }
 
-        _logger.LogInformation("[OK] Magnet enviado ao qBittorrent");
+        _logger.Info("Magnet enviado ao qBittorrent");
     }
 }
