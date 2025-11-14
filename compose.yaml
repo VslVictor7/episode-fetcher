@@ -1,0 +1,10 @@
+services:
+  anime-monitor:
+    build:
+      context: .
+    container_name: anime-monitor
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./json:/app/json
