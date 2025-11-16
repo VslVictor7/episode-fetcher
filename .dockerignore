@@ -79,6 +79,9 @@ yarn-error.log
 *.cache
 *.pidb
 
+# Visual Studio solution files
+*.sln
+
 # Ensure Dockerfile and compose files are included even if a broader pattern would ignore them
 !Dockerfile
 !docker-compose*.yml
