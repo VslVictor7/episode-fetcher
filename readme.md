@@ -1,4 +1,4 @@
-# Episode-Fetcher
+# Anime-Monitor
 
 Script criado para fazer fetch de episodios de animes ou relacionados no nyaa.si, usando um regex que bata com o formato da nomenclatura do episodio.
 
